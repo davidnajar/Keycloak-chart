@@ -1,0 +1,38 @@
+{{- if .Values.postgresql.enabled -}}
+apiVersion: "acid.zalan.do/v1"
+kind: postgresql
+metadata:
+  name: {{ include "keycloak-custom.postgresClusterName" . }}
+  namespace: {{ include "keycloak-custom.namespace" . }}
+  labels:
+    {{- include "keycloak-custom.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  teamId: {{ .Values.postgresql.teamId | quote }}
+  numberOfInstances: {{ .Values.postgresql.numberOfInstances }}
+
+  postgresql:
+    version: {{ .Values.postgresql.version | quote }}
+
+  volume:
+    size: {{ .Values.postgresql.volume.size | quote }}
+    {{- if .Values.postgresql.volume.storageClass }}
+    storageClass: {{ .Values.postgresql.volume.storageClass | quote }}
+    {{- end }}
+
+  users:
+    {{ .Values.postgresql.user }}:
+      - superuser
+      - createdb
+
+  databases:
+    {{ .Values.postgresql.database }}: {{ .Values.postgresql.user }}
+
+  resources:
+    requests:
+      cpu: {{ .Values.postgresql.resources.requests.cpu | quote }}
+      memory: {{ .Values.postgresql.resources.requests.memory | quote }}
+    limits:
+      cpu: {{ .Values.postgresql.resources.limits.cpu | quote }}
+      memory: {{ .Values.postgresql.resources.limits.memory | quote }}
+{{- end }}

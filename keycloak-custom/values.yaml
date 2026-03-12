@@ -1,0 +1,137 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Global settings
+# ──────────────────────────────────────────────────────────────────────────────
+global:
+  # Namespace where all resources will be deployed.
+  # Leave empty to use the Helm release namespace.
+  namespace: ""
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Keycloak Operator (official)
+# https://www.keycloak.org/operator/installation
+# ──────────────────────────────────────────────────────────────────────────────
+keycloak-operator:
+  enabled: true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Postgres Operator (Zalando)
+# https://github.com/zalando/postgres-operator
+# ──────────────────────────────────────────────────────────────────────────────
+postgres-operator:
+  enabled: true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# PostgreSQL cluster (via Zalando postgres-operator CRD)
+# ──────────────────────────────────────────────────────────────────────────────
+postgresql:
+  # Toggle creation of the PostgresCluster custom resource.
+  enabled: true
+
+  # Name of the postgresql cluster (Zalando team + cluster convention).
+  teamId: keycloak
+  clusterName: keycloak-db
+
+  # Number of PostgreSQL instances in the cluster.
+  numberOfInstances: 2
+
+  # PostgreSQL version to deploy (must be supported by the operator image).
+  version: "16"
+
+  # Resource requests and limits for each PostgreSQL pod.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Persistent volume claim for PostgreSQL data.
+  volume:
+    size: 5Gi
+    storageClass: ""
+
+  # Database name created for Keycloak.
+  database: keycloak
+
+  # Database user created for Keycloak.
+  user: keycloak
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Keycloak database credentials secret
+# The Zalando operator stores credentials at
+#   <user>.<clusterName>.<namespace>.credentials.postgresql.acid.zalan.do
+# but we create a convenience secret consumed by the Keycloak CR.
+# ──────────────────────────────────────────────────────────────────────────────
+keycloakDbSecret:
+  # Name of the Secret that stores the Keycloak DB password.
+  # The Zalando operator auto-creates a secret named
+  #   <user>.<teamId>-<clusterName>.<namespace>.credentials.postgresql.acid.zalan.do
+  # This chart creates a bridge secret with the name below.
+  name: keycloak-db-secret
+
+  # Set a static password here **only** for development/testing.
+  # Leave empty to let the Zalando operator generate one automatically
+  # (the operator-generated secret is referenced instead).
+  password: ""
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Keycloak CR (via official Keycloak Operator CRD)
+# https://www.keycloak.org/operator/basic-deployment
+# ──────────────────────────────────────────────────────────────────────────────
+keycloak:
+  # Toggle creation of the Keycloak custom resource.
+  enabled: true
+
+  # Number of Keycloak instances in the cluster.
+  instances: 2
+
+  # Keycloak image (uses the appVersion from Chart.yaml by default).
+  image:
+    repository: quay.io/keycloak/keycloak
+    tag: ""       # defaults to .Chart.AppVersion
+    pullPolicy: IfNotPresent
+
+  # HTTP configuration.
+  http:
+    tlsSecret: ""          # TLS secret name; leave empty to use HTTP only
+    httpEnabled: true
+
+  # Hostname configuration.
+  hostname:
+    hostname: ""           # e.g. keycloak.example.com
+    adminHostname: ""      # optional separate admin hostname
+    backchannelDynamic: false
+
+  # Proxy mode: edge | reencrypt | passthrough | none
+  proxy:
+    headers: xforwarded
+
+  # Additional environment variables passed to Keycloak pods.
+  additionalOptions: []
+  # - name: KC_LOG_LEVEL
+  #   value: INFO
+
+  # Resource requests and limits for each Keycloak pod.
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+  # Ingress configuration (set hostname above to enable).
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    tls: []
+
+  # Initial admin credentials secret name (must exist before deploying).
+  # The secret must contain 'username' and 'password' keys.
+  adminSecret: keycloak-admin-secret
+
+  # Transaction configuration.
+  transaction:
+    xaEnabled: false
