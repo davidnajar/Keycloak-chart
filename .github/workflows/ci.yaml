@@ -1,0 +1,222 @@
+name: Chart CI
+
+# Run on every push and on every pull-request targeting any branch.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 1 – static checks (fast, no cluster required)
+  # ────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Template
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.16.0"
+
+      # helm lint uses the stub sub-charts already committed under charts/
+      - name: helm lint
+        run: helm lint keycloak-custom/ --strict
+
+      # helm template renders every template and surfaces YAML/logic errors
+      # without needing a cluster.  Operator sub-charts are disabled so that
+      # the lightweight stubs don't interfere with rendering.
+      - name: helm template (smoke-test rendering)
+        run: |
+          helm template ci-render ./keycloak-custom \
+            --set keycloak-operator.enabled=false \
+            --set postgres-operator.enabled=false \
+            --set keycloakDbSecret.password=placeholder \
+            --debug
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 2 – full integration test on a local k3d cluster
+  # ────────────────────────────────────────────────────────────────────────────
+  integration-test:
+    name: Integration Test (k3d)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── install tools ────────────────────────────────────────────────────────
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.16.0"
+
+      - name: Install k3d v5.7.4
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \
+            | TAG=v5.7.4 bash
+          k3d version
+
+      # ── create cluster ───────────────────────────────────────────────────────
+      - name: Create k3d cluster
+        run: |
+          k3d cluster create ci-cluster \
+            --agents 1 \
+            --no-lb \
+            --wait
+          kubectl cluster-info
+          kubectl get nodes -o wide
+
+      # ── helm dependencies ────────────────────────────────────────────────────
+      - name: Update Helm dependencies
+        run: helm dependency update keycloak-custom/
+
+      # ── PHASE 1: install operators only (no Keycloak / PostgreSQL CRs) ───────
+      # This ensures CRDs are registered and the operators are running before
+      # we create any custom resources that they need to reconcile.
+      - name: "[Phase 1] Install operators"
+        run: |
+          helm install keycloak-custom ./keycloak-custom \
+            --namespace keycloak \
+            --create-namespace \
+            --set keycloak.enabled=false \
+            --set postgresql.enabled=false \
+            --wait \
+            --timeout 5m
+
+      - name: Wait for CRDs to be established
+        run: |
+          kubectl wait --for=condition=established \
+            crd/keycloaks.k8s.keycloak.org \
+            crd/postgresqls.acid.zalan.do \
+            --timeout=120s
+
+      - name: Wait for operator Deployments to roll out
+        run: |
+          kubectl rollout status deployment \
+            -n keycloak \
+            --timeout=120s
+
+      # ── Keycloak admin credentials secret ────────────────────────────────────
+      - name: Create Keycloak admin secret
+        run: |
+          kubectl create secret generic keycloak-admin-secret \
+            --from-literal=username=admin \
+            --from-literal=password='Admin1234!' \
+            -n keycloak
+
+      # ── PHASE 2: add the PostgreSQL CR ───────────────────────────────────────
+      # The Zalando operator reconciles the CR and generates a credential secret
+      # (keycloak.keycloak-keycloak-db).  We wait for it to exist before we
+      # render the bridge secret in phase 3 so that the Helm lookup succeeds.
+      - name: "[Phase 2] Deploy PostgreSQL cluster"
+        run: |
+          helm upgrade keycloak-custom ./keycloak-custom \
+            --namespace keycloak \
+            --values ci/test-values.yaml \
+            --set keycloak.enabled=false \
+            --wait \
+            --timeout 5m
+
+      - name: Wait for PostgreSQL cluster to reach Running status
+        run: |
+          echo "Waiting for PostgreSQL cluster keycloak-keycloak-db …"
+          timeout 300 bash -c '
+            until [ "$(kubectl get postgresql keycloak-keycloak-db \
+                         -n keycloak \
+                         -o jsonpath="{.status.PostgresClusterStatus}" \
+                         2>/dev/null)" = "Running" ]; do
+              echo "  current status: $(kubectl get postgresql keycloak-keycloak-db \
+                       -n keycloak \
+                       -o jsonpath="{.status.PostgresClusterStatus}" 2>/dev/null \
+                     || echo "not yet available")"
+              sleep 15
+            done
+          '
+          echo "PostgreSQL cluster is Running!"
+
+      - name: Wait for Zalando credential secret to be created
+        run: |
+          echo "Waiting for Zalando credential secret keycloak.keycloak-keycloak-db …"
+          timeout 60 bash -c '
+            until kubectl get secret keycloak.keycloak-keycloak-db \
+                    -n keycloak &>/dev/null; do
+              sleep 5
+            done
+          '
+          echo "Credential secret found."
+
+      # ── PHASE 3: add the Keycloak CR ────────────────────────────────────────
+      # At this point the Zalando secret exists, so the Helm lookup in
+      # keycloak-db-secret.yaml will populate the bridge secret with the
+      # correct database password.
+      - name: "[Phase 3] Deploy Keycloak"
+        run: |
+          helm upgrade keycloak-custom ./keycloak-custom \
+            --namespace keycloak \
+            --values ci/test-values.yaml \
+            --wait \
+            --timeout 5m
+
+      # ── wait for Keycloak ────────────────────────────────────────────────────
+      - name: Wait for Keycloak CR to be Ready
+        run: |
+          kubectl wait keycloak/keycloak-custom \
+            --for=condition=Ready \
+            --timeout=15m \
+            -n keycloak
+
+      # ── accessibility check ──────────────────────────────────────────────────
+      # The Keycloak Operator creates a StatefulSet whose pods are named
+      # <cr-name>-<ordinal>, so the first pod is keycloak-custom-0.
+      # Keycloak listens on port 8080 (HTTP) inside the container.
+      - name: Verify Keycloak is accessible
+        run: |
+          echo "Checking Keycloak /health/ready endpoint …"
+          kubectl exec -n keycloak keycloak-custom-0 -- \
+            curl --silent --fail \
+              http://localhost:8080/health/ready
+          echo ""
+          echo "Keycloak health check passed — service is up and ready!"
+
+      # ── debug info on failure ────────────────────────────────────────────────
+      - name: Debug output on failure
+        if: failure()
+        run: |
+          echo "===== Pods ====="
+          kubectl get pods -n keycloak -o wide || true
+
+          echo ""
+          echo "===== Keycloak CR ====="
+          kubectl describe keycloak -n keycloak || true
+
+          echo ""
+          echo "===== PostgreSQL CR ====="
+          kubectl describe postgresql -n keycloak || true
+
+          echo ""
+          echo "===== Keycloak Operator logs ====="
+          kubectl logs -n keycloak \
+            -l app.kubernetes.io/name=keycloak-operator \
+            --tail=100 || true
+
+          echo ""
+          echo "===== Postgres Operator logs ====="
+          kubectl logs -n keycloak \
+            -l app.kubernetes.io/name=postgres-operator \
+            --tail=100 || true
+
+          echo ""
+          echo "===== Kubernetes events ====="
+          kubectl get events -n keycloak \
+            --sort-by=.lastTimestamp || true
+
+          echo ""
+          echo "===== Helm status ====="
+          helm status keycloak-custom -n keycloak || true
