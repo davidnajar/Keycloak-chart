@@ -30,11 +30,15 @@ jobs:
       # helm template renders every template and surfaces YAML/logic errors
       # without needing a cluster.  Operator sub-charts are disabled so that
       # the lightweight stubs don't interfere with rendering.
+      # hostzero-keycloak-operator is also disabled here; it is enabled and
+      # exercised in the integration-test job after helm dependency update
+      # pulls the real chart from the OCI registry.
       - name: helm template (smoke-test rendering)
         run: |
           helm template ci-render ./keycloak-custom \
             --set keycloak-operator.enabled=false \
             --set postgres-operator.enabled=false \
+            --set hostzero-keycloak-operator.enabled=false \
             --set keycloakDbSecret.password=placeholder \
             --debug
 
@@ -95,6 +99,9 @@ jobs:
           kubectl wait --for=condition=established \
             crd/keycloaks.k8s.keycloak.org \
             crd/postgresqls.acid.zalan.do \
+            crd/keycloakinstances.keycloak.hostzero.com \
+            crd/keycloakrealms.keycloak.hostzero.com \
+            crd/keycloakclients.keycloak.hostzero.com \
             --timeout=120s
 
       - name: Wait for operator Deployments to roll out
@@ -204,6 +211,12 @@ jobs:
           echo "===== Keycloak Operator logs ====="
           kubectl logs -n keycloak \
             -l app.kubernetes.io/name=keycloak-operator \
+            --tail=100 || true
+
+          echo ""
+          echo "===== Hostzero Keycloak Operator logs ====="
+          kubectl logs -n keycloak \
+            -l app.kubernetes.io/name=hostzero-keycloak-operator \
             --tail=100 || true
 
           echo ""
