@@ -2,10 +2,11 @@ apiVersion: v2
 name: keycloak-custom
 description: >
   A Helm chart that integrates the official Keycloak Operator with the
-  Zalando Postgres Operator, providing a production-ready Keycloak deployment
-  backed by a managed PostgreSQL cluster.
+  Zalando Postgres Operator and the Hostzero-GmbH Keycloak Operator,
+  providing a production-ready Keycloak deployment backed by a managed
+  PostgreSQL cluster with full declarative Keycloak resource management.
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "26.0.0"
 keywords:
   - keycloak
@@ -18,6 +19,7 @@ home: https://www.keycloak.org
 sources:
   - https://github.com/keycloak/keycloak-k8s-resources
   - https://github.com/zalando/postgres-operator
+  - https://github.com/Hostzero-GmbH/keycloak-operator
 maintainers:
   - name: davidnajar
 dependencies:
@@ -29,3 +31,8 @@ dependencies:
     version: "1.12.2"
     repository: "https://opensource.zalando.com/postgres-operator/charts/postgres-operator"
     condition: postgres-operator.enabled
+  - name: keycloak-operator
+    version: "0.4.1"
+    repository: "oci://ghcr.io/hostzero-gmbh/charts"
+    alias: hostzero-keycloak-operator
+    condition: hostzero-keycloak-operator.enabled

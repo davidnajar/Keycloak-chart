@@ -1,8 +1,10 @@
 # Keycloak-chart
 
-A Helm chart that integrates the **official Keycloak Operator** with the
-**Zalando Postgres Operator**, providing a production-ready, operator-managed
-Keycloak identity platform backed by a highly-available PostgreSQL cluster.
+A Helm chart that integrates the **official Keycloak Operator**, the
+**Zalando Postgres Operator**, and the **Hostzero-GmbH Keycloak Operator**,
+providing a production-ready, operator-managed Keycloak identity platform
+backed by a highly-available PostgreSQL cluster with full declarative
+management of Keycloak resources (realms, clients, users, roles, and more).
 
 ## Overview
 
@@ -10,33 +12,42 @@ Keycloak identity platform backed by a highly-available PostgreSQL cluster.
 |-----------|---------|---------|
 | Keycloak Operator | [keycloak/keycloak-k8s-resources](https://www.keycloak.org/operator/installation) | 26.0.0 |
 | Postgres Operator | [zalando/postgres-operator](https://github.com/zalando/postgres-operator) | 1.12.2 |
+| Hostzero Keycloak Operator | [Hostzero-GmbH/keycloak-operator](https://github.com/Hostzero-GmbH/keycloak-operator) | 0.4.1 |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Kubernetes Cluster                                          │
-│                                                             │
-│  ┌───────────────────┐    ┌──────────────────────────────┐  │
-│  │  Keycloak Operator │    │   Zalando Postgres Operator  │  │
-│  │  (reconciles      │    │   (reconciles postgresql CRs)│  │
-│  │   Keycloak CRs)   │    └──────────────┬───────────────┘  │
-│  └────────┬──────────┘                   │                  │
-│           │ manages                      │ manages          │
-│  ┌────────▼──────────┐    ┌──────────────▼───────────────┐  │
-│  │  Keycloak         │───▶│   PostgreSQL Cluster         │  │
-│  │  (k8s.keycloak.   │ db │   (acid.zalan.do/v1)         │  │
-│  │   org/v2alpha1)   │    │   keycloak-keycloak-db       │  │
-│  └───────────────────┘    └──────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Kubernetes Cluster                                                      │
+│                                                                         │
+│  ┌───────────────────┐    ┌──────────────────────────────────────────┐  │
+│  │  Keycloak Operator │    │   Zalando Postgres Operator              │  │
+│  │  (reconciles      │    │   (reconciles postgresql CRs)            │  │
+│  │   Keycloak CRs)   │    └──────────────────┬───────────────────────┘  │
+│  └────────┬──────────┘                       │                          │
+│           │ manages                          │ manages                  │
+│  ┌────────▼──────────┐    ┌──────────────────▼───────────────────────┐  │
+│  │  Keycloak         │───▶│   PostgreSQL Cluster                     │  │
+│  │  (k8s.keycloak.   │ db │   (acid.zalan.do/v1)                     │  │
+│  │   org/v2alpha1)   │    │   keycloak-keycloak-db                   │  │
+│  └───────────────────┘    └──────────────────────────────────────────┘  │
+│           ▲                                                              │
+│           │ connects to                                                  │
+│  ┌────────┴──────────────────────────────────────────────────────────┐  │
+│  │  Hostzero Keycloak Operator (keycloak.hostzero.com/v1beta1)       │  │
+│  │  Declaratively manages: KeycloakInstance, KeycloakRealm,          │  │
+│  │  KeycloakClient, KeycloakUser, KeycloakRole, KeycloakGroup, ...   │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
 * Kubernetes 1.26+
 * Helm 3.12+
-* The Keycloak Operator and Postgres Operator CRDs installed on the cluster
-  (handled automatically when the operator sub-charts are enabled)
+* The Keycloak Operator, Postgres Operator, and Hostzero Keycloak Operator
+  CRDs installed on the cluster (handled automatically when the operator
+  sub-charts are enabled)
 
 ## Installing the Chart
 
@@ -93,6 +104,34 @@ for a full reference.
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `postgres-operator.enabled` | Install the Zalando Postgres Operator sub-chart | `true` |
+
+### Hostzero Keycloak Operator
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `hostzero-keycloak-operator.enabled` | Install the Hostzero Keycloak Operator sub-chart | `true` |
+| `hostzero-keycloak-operator.crds.install` | Install all `keycloak.hostzero.com/v1beta1` CRDs | `true` |
+| `hostzero-keycloak-operator.crds.keep` | Keep CRDs on chart uninstall | `true` |
+
+The Hostzero Keycloak Operator introduces the following CRDs:
+
+| CRD | Description |
+|-----|-------------|
+| `KeycloakInstance` | Namespaced connection to a Keycloak server |
+| `ClusterKeycloakInstance` | Cluster-wide connection to a Keycloak server |
+| `KeycloakRealm` | Realm configuration |
+| `ClusterKeycloakRealm` | Cluster-wide realm configuration |
+| `KeycloakClient` | OAuth2/OIDC client |
+| `KeycloakClientScope` | Client scope |
+| `KeycloakProtocolMapper` | Token claim mapper |
+| `KeycloakUser` | User management |
+| `KeycloakUserCredential` | User password |
+| `KeycloakGroup` | Group management |
+| `KeycloakRole` | Realm and client roles |
+| `KeycloakRoleMapping` | Role-to-user/group assignments |
+| `KeycloakIdentityProvider` | External identity providers |
+| `KeycloakComponent` | LDAP federation, key providers |
+| `KeycloakOrganization` | Organization management (Keycloak 26+) |
 
 ### PostgreSQL Cluster
 

@@ -21,6 +21,19 @@ postgres-operator:
   enabled: true
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Hostzero Keycloak Operator
+# Manages Keycloak resources (realms, clients, users, roles, etc.) as CRDs.
+# API group: keycloak.hostzero.com/v1beta1
+# https://github.com/Hostzero-GmbH/keycloak-operator
+# ──────────────────────────────────────────────────────────────────────────────
+hostzero-keycloak-operator:
+  enabled: true
+  # Install CRDs (ClusterKeycloakInstance, KeycloakRealm, KeycloakClient, etc.)
+  crds:
+    install: true
+    keep: true
+
+# ──────────────────────────────────────────────────────────────────────────────
 # PostgreSQL cluster (via Zalando postgres-operator CRD)
 # ──────────────────────────────────────────────────────────────────────────────
 postgresql:
