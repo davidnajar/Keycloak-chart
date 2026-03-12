@@ -8,6 +8,8 @@ global:
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Keycloak Operator (official)
+# Manifests are bundled directly in this chart (no OCI sub-chart dependency).
+# CRDs are in crds/; RBAC, Service and Deployment are in templates/keycloak-operator/.
 # https://www.keycloak.org/operator/installation
 # ──────────────────────────────────────────────────────────────────────────────
 keycloak-operator:
