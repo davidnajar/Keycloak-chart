@@ -1,0 +1,29 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# CI test overrides
+# Reduce resource footprint so the chart fits on a single-node k3d cluster
+# running in GitHub Actions.
+# ──────────────────────────────────────────────────────────────────────────────
+
+postgresql:
+  # Single replica is enough for CI
+  numberOfInstances: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  volume:
+    size: 1Gi
+
+keycloak:
+  # Single instance is enough for CI
+  instances: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
