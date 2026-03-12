@@ -81,6 +81,23 @@ jobs:
       - name: Update Helm dependencies
         run: helm dependency update keycloak-custom/
 
+      # ── Install sub-chart CRDs ───────────────────────────────────────────────
+      # Helm 3 only installs CRDs from the ROOT chart's crds/ directory.
+      # Sub-chart CRDs (postgres-operator, hostzero-keycloak-operator) are NOT
+      # applied automatically, so we extract and apply them here before any
+      # helm install/upgrade that might need those API groups.
+      - name: Install sub-chart CRDs
+        run: |
+          for chart in keycloak-custom/charts/*.tgz; do
+            echo "Applying CRDs from ${chart} …"
+            crds=$(helm show crds "${chart}")
+            if [ -n "${crds}" ]; then
+              echo "${crds}" | kubectl apply --server-side -f -
+            else
+              echo "  (no CRDs in ${chart})"
+            fi
+          done
+
       # ── PHASE 1: install operators only (no Keycloak / PostgreSQL CRs) ───────
       # This ensures CRDs are registered and the operators are running before
       # we create any custom resources that they need to reconcile.
