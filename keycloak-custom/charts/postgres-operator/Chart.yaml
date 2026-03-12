@@ -1,0 +1,6 @@
+apiVersion: v2
+name: postgres-operator
+description: Zalando Postgres Operator Helm chart (stub for local linting)
+type: application
+version: 1.12.2
+appVersion: "1.12.2"

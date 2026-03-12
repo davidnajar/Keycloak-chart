@@ -1,0 +1,49 @@
+Thank you for installing {{ .Chart.Name }} v{{ .Chart.Version }}!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Keycloak + Postgres Operator integration
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Namespace  : {{ include "keycloak-custom.namespace" . }}
+Release    : {{ .Release.Name }}
+
+────────────────────────────────────────────────────────────
+ PostgreSQL cluster
+────────────────────────────────────────────────────────────
+Cluster     : {{ include "keycloak-custom.postgresClusterName" . }}
+Database    : {{ .Values.postgresql.database }}
+User        : {{ .Values.postgresql.user }}
+
+The Zalando Postgres Operator will create a credential secret:
+  {{ include "keycloak-custom.zalandoCredentialSecret" . }}
+
+A bridge secret used by Keycloak:
+  {{ .Values.keycloakDbSecret.name }}
+
+────────────────────────────────────────────────────────────
+ Keycloak
+────────────────────────────────────────────────────────────
+CR Name     : {{ include "keycloak-custom.fullname" . }}
+Instances   : {{ .Values.keycloak.instances }}
+Image       : {{ .Values.keycloak.image.repository }}:{{ include "keycloak-custom.imageTag" . }}
+
+Check the status of the Keycloak instance:
+  kubectl get keycloak {{ include "keycloak-custom.fullname" . }} \
+    -n {{ include "keycloak-custom.namespace" . }}
+
+To get the admin secret (must be created before deploying):
+  kubectl get secret {{ .Values.keycloak.adminSecret }} \
+    -n {{ include "keycloak-custom.namespace" . }} -o jsonpath='{.data}'
+
+{{- if not .Values.keycloak.hostname.hostname }}
+
+⚠  No hostname was configured. Keycloak will be accessible only via
+   ClusterIP service or port-forward:
+
+   kubectl port-forward -n {{ include "keycloak-custom.namespace" . }} \
+     svc/{{ include "keycloak-custom.fullname" . }}-service 8080:80
+{{- else }}
+
+Keycloak will be available at:
+  http{{ if .Values.keycloak.http.tlsSecret }}s{{ end }}://{{ .Values.keycloak.hostname.hostname }}
+{{- end }}

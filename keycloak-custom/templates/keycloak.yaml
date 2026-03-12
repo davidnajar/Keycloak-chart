@@ -1,0 +1,61 @@
+{{- if .Values.keycloak.enabled -}}
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: Keycloak
+metadata:
+  name: {{ include "keycloak-custom.fullname" . }}
+  namespace: {{ include "keycloak-custom.namespace" . }}
+  labels:
+    {{- include "keycloak-custom.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+spec:
+  instances: {{ .Values.keycloak.instances }}
+
+  image: {{ .Values.keycloak.image.repository }}:{{ include "keycloak-custom.imageTag" . }}
+
+  http:
+    httpEnabled: {{ .Values.keycloak.http.httpEnabled }}
+    {{- if .Values.keycloak.http.tlsSecret }}
+    tlsSecret: {{ .Values.keycloak.http.tlsSecret | quote }}
+    {{- end }}
+
+  hostname:
+    {{- if .Values.keycloak.hostname.hostname }}
+    hostname: {{ .Values.keycloak.hostname.hostname | quote }}
+    {{- end }}
+    {{- if .Values.keycloak.hostname.adminHostname }}
+    admin: {{ .Values.keycloak.hostname.adminHostname | quote }}
+    {{- end }}
+    backchannelDynamic: {{ .Values.keycloak.hostname.backchannelDynamic }}
+
+  proxy:
+    headers: {{ .Values.keycloak.proxy.headers | quote }}
+
+  db:
+    vendor: postgres
+    host: >-
+      {{ include "keycloak-custom.postgresClusterName" . }}.{{ include "keycloak-custom.namespace" . }}.svc.cluster.local
+    port: 5432
+    database: {{ .Values.postgresql.database | quote }}
+    usernameSecret:
+      name: {{ .Values.keycloakDbSecret.name }}
+      key: username
+    passwordSecret:
+      name: {{ .Values.keycloakDbSecret.name }}
+      key: password
+
+  {{- if .Values.keycloak.additionalOptions }}
+  additionalOptions:
+    {{- toYaml .Values.keycloak.additionalOptions | nindent 4 }}
+  {{- end }}
+
+  resources:
+    requests:
+      cpu: {{ .Values.keycloak.resources.requests.cpu | quote }}
+      memory: {{ .Values.keycloak.resources.requests.memory | quote }}
+    limits:
+      cpu: {{ .Values.keycloak.resources.limits.cpu | quote }}
+      memory: {{ .Values.keycloak.resources.limits.memory | quote }}
+
+  transaction:
+    xaEnabled: {{ .Values.keycloak.transaction.xaEnabled }}
+{{- end }}
