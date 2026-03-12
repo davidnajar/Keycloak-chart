@@ -23,10 +23,6 @@ sources:
 maintainers:
   - name: davidnajar
 dependencies:
-  - name: keycloak-operator
-    version: "26.0.0"
-    repository: "oci://quay.io/keycloak"
-    condition: keycloak-operator.enabled
   - name: postgres-operator
     version: "1.12.2"
     repository: "https://opensource.zalando.com/postgres-operator/charts/postgres-operator"
